@@ -142,7 +142,7 @@ class CausalEngine:
         json_response = await self._call_claude(
             system="You are a JSON formatting assistant. Output ONLY valid JSON, nothing else.",
             user=structured_prompt,
-            max_tokens=1024,  # Reduced from 4096
+            max_tokens=4096,  # Needs full budget for 4 theses in JSON
         )
         logger.debug(f"[PASS2] JSON generated ({len(json_response)} chars)")
 
