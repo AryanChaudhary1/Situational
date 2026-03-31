@@ -1,6 +1,7 @@
 """FastAPI REST routes."""
 from __future__ import annotations
 
+import traceback
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -90,6 +91,7 @@ async def get_signals():
         report = scanner.scan_all()
         return {"status": "ok", "data": report.to_dict()}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -117,6 +119,7 @@ async def generate_theses(req: ThesisRequest):
 
         return {"status": "ok", "theses": [t.to_dict() for t in theses]}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -159,6 +162,7 @@ async def get_filing_intel():
         report = tracker.run_full_scan(signals.to_summary())
         return {"status": "ok", "data": report.to_dict()}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -203,6 +207,7 @@ async def chat(req: ChatRequest):
         response = agent.chat(req.message, signal_summary=signal_summary)
         return {"status": "ok", "response": response}
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -213,7 +213,7 @@ class CausalEngine:
     async def _call_claude(self, system: str, user: str, max_tokens: int = 4096) -> str:
         """Call Claude API asynchronously."""
         # Run in thread pool to avoid blocking event loop
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
             lambda: self.client.messages.create(
