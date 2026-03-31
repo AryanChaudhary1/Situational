@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import sys
 import asyncio
+import logging
 from datetime import datetime
 
 from rich.console import Console
@@ -37,6 +38,15 @@ from rich.table import Table
 from rich.markdown import Markdown
 
 console = Console()
+
+# Configure logging for debugging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+    ]
+)
 
 
 async def run_daily_cycle(config):

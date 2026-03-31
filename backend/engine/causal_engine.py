@@ -13,10 +13,13 @@ import json
 import re
 import uuid
 import asyncio
+import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
 import anthropic
+
+logger = logging.getLogger(__name__)
 
 from backend.config import Config
 from backend.engine.prompts import (
@@ -108,6 +111,9 @@ class CausalEngine:
     async def build_theses(self, signal_summary: str, manual_query: str | None = None) -> list[InvestmentThesis]:
         """Two-pass thesis generation from signal data (optimized with parallel Claude calls)."""
 
+        mode = "manual" if manual_query else "signal_analysis"
+        logger.info(f"[BUILD_THESES] Starting {mode} mode")
+
         # Pass 1: Free-form reasoning
         if manual_query:
             user_prompt = MANUAL_THESIS_PROMPT.format(
@@ -117,11 +123,13 @@ class CausalEngine:
             user_prompt = SIGNAL_ANALYSIS_PROMPT.format(signal_report=signal_summary)
 
         # Run Pass 1 and get reasoning
+        logger.debug("[PASS1] Generating free-form reasoning...")
         reasoning = await self._call_claude(
             system=SYSTEM_PROMPT,
             user=user_prompt,
             max_tokens=2048,  # Reduced from 4096
         )
+        logger.debug(f"[PASS1] Reasoning generated ({len(reasoning)} chars)")
 
         # Pass 2: Structure into JSON with validated tickers (reduced tokens too)
         structured_prompt = (
@@ -130,28 +138,45 @@ class CausalEngine:
             f"{THESIS_JSON_FORMAT}"
         )
 
+        logger.debug("[PASS2] Generating structured JSON...")
         json_response = await self._call_claude(
             system="You are a JSON formatting assistant. Output ONLY valid JSON, nothing else.",
             user=structured_prompt,
             max_tokens=1024,  # Reduced from 4096
         )
+        logger.debug(f"[PASS2] JSON generated ({len(json_response)} chars)")
 
         theses = self._parse_theses(json_response)
+        logger.info(f"[PARSE] Parsed {len(theses)} theses from JSON")
 
         # Validate tickers
-        for thesis in theses:
+        for i, thesis in enumerate(theses):
+            initial_count = len(thesis.tickers)
+            logger.debug(f"  Thesis {i}: {thesis.title} ({initial_count} tickers)")
+
             for rec in thesis.tickers:
+                logger.debug(f"    Validating {rec.ticker}...")
                 info = validate_ticker(rec.ticker)
                 if info:
                     rec.validated = True
                     rec.current_price = info.price
+                    logger.debug(f"      ✓ Valid: ${info.price}")
+                else:
+                    logger.warning(f"      ✗ Invalid ticker: {rec.ticker}")
 
             # Filter to only validated tickers
             thesis.tickers = [t for t in thesis.tickers if t.validated]
+            final_count = len(thesis.tickers)
+            if final_count < initial_count:
+                logger.warning(f"  Thesis {i}: Filtered {initial_count} → {final_count} tickers")
 
         # Remove theses with no valid tickers
+        initial_theses = len(theses)
         theses = [t for t in theses if t.tickers]
+        if len(theses) < initial_theses:
+            logger.warning(f"Removed {initial_theses - len(theses)} theses with no valid tickers")
 
+        logger.info(f"[BUILD_THESES] Complete: {len(theses)} theses with {sum(len(t.tickers) for t in theses)} total predictions")
         return theses
 
     async def analyze_holding(self, investor_name: str, ticker: str, shares: float,

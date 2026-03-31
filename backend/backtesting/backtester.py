@@ -14,6 +14,7 @@ Resolution logic:
 """
 from __future__ import annotations
 import re
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -22,6 +23,8 @@ from backend.db.database import (
 )
 from backend.engine.ticker_validator import get_current_price
 from backend.engine.causal_engine import InvestmentThesis
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -87,29 +90,57 @@ class Backtester:
         self.db_path = db_path
 
     def log_theses(self, theses: list[InvestmentThesis]):
-        """Log all predictions from a list of theses."""
+        """Log all predictions from a list of theses with detailed validation logging."""
         for thesis in theses:
+            logger.debug(f"[THESIS] {thesis.title} (confidence={thesis.confidence:.2f})")
+
             for rec in thesis.tickers:
+                # Log raw strings before parsing
+                logger.debug(f"  [{rec.ticker} {rec.direction}] Raw: entry_zone='{rec.entry_zone}' target='{rec.target}' stop='{rec.stop_loss}'")
+
+                # Parse prices
                 entry = _parse_price(rec.entry_zone)
                 target = _parse_price(rec.target)
                 stop = _parse_price(rec.stop_loss)
 
+                logger.debug(f"    Parsed: entry={entry} target={target} stop={stop}")
+
                 if not entry:
                     entry = rec.current_price if rec.current_price > 0 else 0
+                    logger.debug(f"    Fallback entry: {entry} (from current_price)")
+
+                # Apply defaults if target/stop missing
+                target_final = target or entry * 1.1
+                stop_final = stop or entry * 0.95
+
+                if not target:
+                    logger.warning(f"    [WARN] {rec.ticker} has missing target price, using default +10%: {target_final:.2f}")
+                if not stop:
+                    logger.warning(f"    [WARN] {rec.ticker} has missing stop price, using default -5%: {stop_final:.2f}")
 
                 if entry and entry > 0:
+                    # Validation checks
+                    if rec.direction == "LONG" and target_final <= entry:
+                        logger.error(f"    [ERROR] {rec.ticker} LONG but target ({target_final:.2f}) <= entry ({entry:.2f})")
+                    elif rec.direction == "SHORT" and target_final >= entry:
+                        logger.error(f"    [ERROR] {rec.ticker} SHORT but target ({target_final:.2f}) >= entry ({entry:.2f})")
+
+                    logger.info(f"    LOGGED: {rec.ticker} {rec.direction} | entry={entry:.2f} target={target_final:.2f} stop={stop_final:.2f} conf={thesis.confidence:.2f}")
+
                     save_prediction(
                         db_path=self.db_path,
                         thesis_id=thesis.thesis_id,
                         ticker=rec.ticker,
                         direction=rec.direction,
                         entry_price=entry,
-                        target_price=target or entry * 1.1,
-                        stop_price=stop or entry * 0.95,
+                        target_price=target_final,
+                        stop_price=stop_final,
                         confidence=thesis.confidence,
                         thesis_summary=thesis.title,
                         time_horizon_days=thesis.time_horizon_days,
                     )
+                else:
+                    logger.error(f"    [SKIP] {rec.ticker} has invalid entry price: {entry}")
 
     def check_outcomes(self) -> list[dict]:
         """Check all open predictions against current prices. Resolve where appropriate."""
