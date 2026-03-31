@@ -227,18 +227,41 @@ class CausalEngine:
 
     def _parse_theses(self, json_str: str) -> list[InvestmentThesis]:
         """Parse JSON response into InvestmentThesis objects."""
+        logger.debug(f"[PARSE] Raw JSON response (first 500 chars): {json_str[:500]}")
+
         # Extract JSON from response (might have markdown wrapping)
         json_match = re.search(r'\{[\s\S]*\}', json_str)
         if not json_match:
-            return []
+            # Try array format [{ ... }]
+            json_match = re.search(r'\[[\s\S]*\]', json_str)
+            if json_match:
+                try:
+                    arr = json.loads(json_match.group())
+                    if isinstance(arr, list):
+                        logger.info(f"[PARSE] Found JSON array with {len(arr)} items, wrapping as theses")
+                        data = {"theses": arr}
+                    else:
+                        return []
+                except json.JSONDecodeError as e:
+                    logger.error(f"[PARSE] JSON array decode failed: {e}")
+                    return []
+            else:
+                logger.error("[PARSE] No JSON object or array found in response")
+                return []
+        else:
+            try:
+                data = json.loads(json_match.group())
+            except json.JSONDecodeError as e:
+                logger.error(f"[PARSE] JSON decode failed: {e}")
+                logger.error(f"[PARSE] Matched text (first 300 chars): {json_match.group()[:300]}")
+                return []
 
-        try:
-            data = json.loads(json_match.group())
-        except json.JSONDecodeError:
-            return []
+        logger.debug(f"[PARSE] JSON keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
 
         theses_data = data.get("theses", [])
         if not theses_data:
+            logger.error(f"[PARSE] No 'theses' key in JSON. Available keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
+            logger.error(f"[PARSE] Full JSON (first 1000 chars): {json.dumps(data)[:1000]}")
             return []
 
         theses = []
