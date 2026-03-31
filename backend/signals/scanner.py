@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, asdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from backend.config import Config
 from backend.signals.vix import get_vix_signal, VixSignal
@@ -93,8 +93,25 @@ def classify_severity(all_flags: list[str], vix: VixSignal, sectors: SectorSigna
 class SignalScanner:
     def __init__(self, config: Config):
         self.config = config
+        self._cache: SignalReport | None = None
+        self._cache_time: datetime | None = None
+        self._cache_ttl_seconds = 300  # 5-minute cache
 
     def scan_all(self) -> SignalReport:
+        # Return cached result if fresh (within TTL)
+        if self._cache and self._cache_time:
+            age = (datetime.utcnow() - self._cache_time).total_seconds()
+            if age < self._cache_ttl_seconds:
+                return self._cache
+
+        # Otherwise, scan fresh and cache
+        report = self._scan_fresh()
+        self._cache = report
+        self._cache_time = datetime.utcnow()
+        return report
+
+    def _scan_fresh(self) -> SignalReport:
+        """Scan all signals without caching."""
         vix = get_vix_signal()
         yield_curve = get_yield_curve_signal(self.config.fred_api_key)
         currency = get_currency_signal()

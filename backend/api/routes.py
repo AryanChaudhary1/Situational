@@ -101,12 +101,12 @@ class ThesisRequest(BaseModel):
 
 @router.post("/theses/generate")
 async def generate_theses(req: ThesisRequest):
-    """Generate investment theses from current signals."""
+    """Generate investment theses from current signals (with signal caching)."""
     try:
         scanner = _get_scanner()
         signals = scanner.scan_all()
         engine = _get_engine()
-        theses = engine.build_theses(signals.to_summary(), req.query)
+        theses = await engine.build_theses(signals.to_summary(), req.query)
 
         # Save to graph and backtester
         graph = _get_thesis_graph()

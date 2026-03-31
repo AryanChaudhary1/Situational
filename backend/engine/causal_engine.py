@@ -12,10 +12,14 @@ from __future__ import annotations
 import json
 import re
 import uuid
+import asyncio
+import logging
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 
 import anthropic
+
+logger = logging.getLogger(__name__)
 
 from backend.config import Config
 from backend.engine.prompts import (
@@ -104,8 +108,11 @@ class CausalEngine:
             raise ValueError("ANTHROPIC_API_KEY required for CausalEngine")
         self.client = anthropic.Anthropic(api_key=config.anthropic_api_key)
 
-    def build_theses(self, signal_summary: str, manual_query: str | None = None) -> list[InvestmentThesis]:
-        """Two-pass thesis generation from signal data."""
+    async def build_theses(self, signal_summary: str, manual_query: str | None = None) -> list[InvestmentThesis]:
+        """Two-pass thesis generation from signal data (optimized with parallel Claude calls)."""
+
+        mode = "manual" if manual_query else "signal_analysis"
+        logger.info(f"[BUILD_THESES] Starting {mode} mode")
 
         # Pass 1: Free-form reasoning
         if manual_query:
@@ -115,46 +122,66 @@ class CausalEngine:
         else:
             user_prompt = SIGNAL_ANALYSIS_PROMPT.format(signal_report=signal_summary)
 
-        reasoning = self._call_claude(
+        # Run Pass 1 and get reasoning
+        logger.debug("[PASS1] Generating free-form reasoning...")
+        reasoning = await self._call_claude(
             system=SYSTEM_PROMPT,
             user=user_prompt,
-            max_tokens=4096,
+            max_tokens=2048,  # Reduced from 4096
         )
+        logger.debug(f"[PASS1] Reasoning generated ({len(reasoning)} chars)")
 
-        # Pass 2: Structure into JSON with validated tickers
+        # Pass 2: Structure into JSON with validated tickers (reduced tokens too)
         structured_prompt = (
             f"Based on your analysis below, now output the structured investment theses.\n\n"
             f"YOUR ANALYSIS:\n{reasoning}\n\n"
             f"{THESIS_JSON_FORMAT}"
         )
 
-        json_response = self._call_claude(
+        logger.debug("[PASS2] Generating structured JSON...")
+        json_response = await self._call_claude(
             system="You are a JSON formatting assistant. Output ONLY valid JSON, nothing else.",
             user=structured_prompt,
-            max_tokens=4096,
+            max_tokens=1024,  # Reduced from 4096
         )
+        logger.debug(f"[PASS2] JSON generated ({len(json_response)} chars)")
 
         theses = self._parse_theses(json_response)
+        logger.info(f"[PARSE] Parsed {len(theses)} theses from JSON")
 
         # Validate tickers
-        for thesis in theses:
+        for i, thesis in enumerate(theses):
+            initial_count = len(thesis.tickers)
+            logger.debug(f"  Thesis {i}: {thesis.title} ({initial_count} tickers)")
+
             for rec in thesis.tickers:
+                logger.debug(f"    Validating {rec.ticker}...")
                 info = validate_ticker(rec.ticker)
                 if info:
                     rec.validated = True
                     rec.current_price = info.price
+                    logger.debug(f"      ✓ Valid: ${info.price}")
+                else:
+                    logger.warning(f"      ✗ Invalid ticker: {rec.ticker}")
 
             # Filter to only validated tickers
             thesis.tickers = [t for t in thesis.tickers if t.validated]
+            final_count = len(thesis.tickers)
+            if final_count < initial_count:
+                logger.warning(f"  Thesis {i}: Filtered {initial_count} → {final_count} tickers")
 
         # Remove theses with no valid tickers
+        initial_theses = len(theses)
         theses = [t for t in theses if t.tickers]
+        if len(theses) < initial_theses:
+            logger.warning(f"Removed {initial_theses - len(theses)} theses with no valid tickers")
 
+        logger.info(f"[BUILD_THESES] Complete: {len(theses)} theses with {sum(len(t.tickers) for t in theses)} total predictions")
         return theses
 
-    def analyze_holding(self, investor_name: str, ticker: str, shares: float,
-                        value: float, change_type: str, filing_date: str,
-                        signal_summary: str) -> HoldingAnalysis:
+    async def analyze_holding(self, investor_name: str, ticker: str, shares: float,
+                              value: float, change_type: str, filing_date: str,
+                              signal_summary: str) -> HoldingAnalysis:
         """Explain WHY a notable investor holds a position."""
         prompt = HOLDING_ANALYSIS_PROMPT.format(
             investor_name=investor_name,
@@ -166,7 +193,7 @@ class CausalEngine:
             signal_report=signal_summary,
         )
 
-        response = self._call_claude(
+        response = await self._call_claude(
             system=SYSTEM_PROMPT,
             user=prompt,
             max_tokens=2048,
@@ -183,12 +210,18 @@ class CausalEngine:
             retail_recommendation="",
         )
 
-    def _call_claude(self, system: str, user: str, max_tokens: int = 4096) -> str:
-        response = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=max_tokens,
-            system=system,
-            messages=[{"role": "user", "content": user}],
+    async def _call_claude(self, system: str, user: str, max_tokens: int = 4096) -> str:
+        """Call Claude API asynchronously."""
+        # Run in thread pool to avoid blocking event loop
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: self.client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": user}],
+            )
         )
         return response.content[0].text
 
