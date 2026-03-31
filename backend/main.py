@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import asyncio
 from datetime import datetime
 
 from rich.console import Console
@@ -38,7 +39,7 @@ from rich.markdown import Markdown
 console = Console()
 
 
-def run_daily_cycle(config):
+async def run_daily_cycle(config):
     """Execute the full daily pipeline."""
     from backend.db.database import init_db, save_signal_snapshot
     from backend.signals.scanner import SignalScanner
@@ -83,7 +84,7 @@ def run_daily_cycle(config):
     # 4. Build new theses
     console.print("[yellow]Generating investment theses...[/yellow]")
     engine = CausalEngine(config)
-    theses = engine.build_theses(signals.to_summary())
+    theses = await engine.build_theses(signals.to_summary())
 
     # 5. Save to graph + log predictions
     graph = ThesisGraph(config)
@@ -121,7 +122,7 @@ def run_daily_cycle(config):
     console.print("[bold green]Daily cycle complete.[/bold green]\n")
 
 
-def run_thesis(config, query: str):
+async def run_thesis(config, query: str):
     """Generate a thesis on a specific topic."""
     from backend.db.database import init_db
     from backend.signals.scanner import SignalScanner
@@ -137,7 +138,7 @@ def run_thesis(config, query: str):
     signals = scanner.scan_all()
 
     engine = CausalEngine(config)
-    theses = engine.build_theses(signals.to_summary(), manual_query=query)
+    theses = await engine.build_theses(signals.to_summary(), manual_query=query)
 
     graph = ThesisGraph(config)
     bt = Backtester(config.db_path)
@@ -290,9 +291,9 @@ def main():
     config = load_config()
 
     if args.command == "run":
-        run_daily_cycle(config)
+        asyncio.run(run_daily_cycle(config))
     elif args.command == "thesis":
-        run_thesis(config, args.query)
+        asyncio.run(run_thesis(config, args.query))
     elif args.command == "scorecard":
         run_scorecard(config)
     elif args.command == "chat":
