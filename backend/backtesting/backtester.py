@@ -119,11 +119,25 @@ class Backtester:
                     logger.warning(f"    [WARN] {rec.ticker} has missing stop price, using default -5%: {stop_final:.2f}")
 
                 if entry and entry > 0:
-                    # Validation checks
+                    # Sanity check: entry price must be in the same ballpark as current price
+                    # Filters out option premiums ($3.50) being mixed with stock prices ($127)
+                    current = rec.current_price
+                    if current > 0:
+                        ratio = entry / current
+                        if ratio < 0.1 or ratio > 10:
+                            logger.warning(
+                                f"    [SKIP] {rec.ticker} entry ${entry:.2f} is {ratio:.1f}x current "
+                                f"${current:.2f} — likely option/stock price mismatch, skipping"
+                            )
+                            continue
+
+                    # Validate price logic for direction
                     if rec.direction == "LONG" and target_final <= entry:
                         logger.error(f"    [ERROR] {rec.ticker} LONG but target ({target_final:.2f}) <= entry ({entry:.2f})")
+                        continue
                     elif rec.direction == "SHORT" and target_final >= entry:
                         logger.error(f"    [ERROR] {rec.ticker} SHORT but target ({target_final:.2f}) >= entry ({entry:.2f})")
+                        continue
 
                     logger.info(f"    LOGGED: {rec.ticker} {rec.direction} | entry={entry:.2f} target={target_final:.2f} stop={stop_final:.2f} conf={thesis.confidence:.2f}")
 
@@ -177,19 +191,30 @@ class Backtester:
             expired = datetime.utcnow() > created + timedelta(days=horizon)
 
             outcome = None
+            exit_price = current_price  # default for expiry
             if hit_target:
                 outcome = "WIN"
+                exit_price = target  # exit at target, not wherever current is now
             elif hit_stop:
                 outcome = "LOSS"
+                exit_price = stop  # exit at stop, not wherever current is now
             elif expired:
                 outcome = "WIN" if ret_pct > 0 else "LOSS"
+                # expired: exit at current price (already set)
 
+            # Recalculate return using actual exit_price
             if outcome:
-                resolve_prediction(self.db_path, pred["id"], current_price, outcome)
+                if direction == "LONG":
+                    final_ret_pct = (exit_price - entry) / entry * 100
+                else:
+                    final_ret_pct = (entry - exit_price) / entry * 100
+
+                resolve_prediction(self.db_path, pred["id"], exit_price, outcome)
                 resolved.append({
                     **pred,
                     "current_price": current_price,
-                    "return_pct": round(ret_pct, 2),
+                    "exit_price": exit_price,
+                    "return_pct": round(final_ret_pct, 2),
                     "outcome": outcome,
                 })
 
