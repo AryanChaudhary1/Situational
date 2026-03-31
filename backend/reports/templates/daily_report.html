@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Situation Room — Daily Briefing</title>
+<style>
+  :root { --bg: #0a0a1a; --surface: #1a1a2e; --primary: #00d4ff; --accent: #7b68ee; --text: #e0e0e0; --muted: #888; --green: #4ade80; --red: #f87171; }
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; padding: 24px; max-width: 900px; margin: 0 auto; }
+  h1 { color: var(--primary); font-size: 1.8em; border-bottom: 2px solid var(--primary); padding-bottom: 12px; margin-bottom: 8px; }
+  h2 { color: var(--accent); margin-top: 32px; margin-bottom: 16px; font-size: 1.3em; }
+  .timestamp { color: var(--muted); font-size: 0.9em; margin-bottom: 24px; }
+  .severity { display: inline-block; padding: 4px 12px; border-radius: 12px; font-weight: 600; font-size: 0.85em; text-transform: uppercase; }
+  .severity-calm { background: #1a3a2a; color: var(--green); }
+  .severity-elevated { background: #3a3a1a; color: #fbbf24; }
+  .severity-alert { background: #3a2a1a; color: #fb923c; }
+  .severity-crisis { background: #3a1a1a; color: var(--red); }
+  .card { background: var(--surface); border: 1px solid #2a2a4a; border-radius: 12px; padding: 20px; margin: 12px 0; }
+  .flag { color: var(--red); font-weight: 600; padding: 4px 0; }
+  .thesis-title { color: var(--primary); font-size: 1.1em; font-weight: 700; }
+  .confidence { display: inline-block; padding: 2px 8px; border-radius: 8px; font-size: 0.8em; }
+  .ticker { display: inline-block; background: #2a2a4a; padding: 2px 8px; border-radius: 4px; margin: 2px; font-family: monospace; }
+  .ticker-long { border-left: 3px solid var(--green); }
+  .ticker-short { border-left: 3px solid var(--red); }
+  .chain-step { padding: 4px 0 4px 16px; border-left: 2px solid var(--accent); margin: 4px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #2a2a4a; }
+  th { color: var(--muted); font-size: 0.85em; text-transform: uppercase; }
+  .win { color: var(--green); } .loss { color: var(--red); }
+  .disclaimer { color: #555; font-size: 0.75em; margin-top: 40px; padding-top: 16px; border-top: 1px solid #2a2a4a; }
+</style>
+</head>
+<body>
+<h1>Situation Room</h1>
+<p class="timestamp">Daily Briefing — {{ timestamp }}</p>
+
+{% if signals %}
+<span class="severity severity-{{ signals.get('severity', 'calm') }}">{{ signals.get('severity', 'calm') }}</span>
+{% endif %}
+
+<h2>Market Signals</h2>
+<pre style="background:var(--surface);padding:16px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;font-size:0.85em;">{{ signal_summary }}</pre>
+
+{% if filing_flags %}
+<h2>Filing Intelligence Flags</h2>
+{% for flag in filing_flags %}
+<p class="flag">{{ flag }}</p>
+{% endfor %}
+{% endif %}
+
+{% if theses %}
+<h2>Investment Theses</h2>
+{% for thesis in theses %}
+<div class="card">
+  <p class="thesis-title">{{ thesis.title }}</p>
+  <p style="margin:8px 0;">{{ thesis.summary }}</p>
+  <p>
+    <span class="confidence" style="background:{% if thesis.confidence >= 0.7 %}#1a3a2a{% elif thesis.confidence >= 0.4 %}#3a3a1a{% else %}#3a1a1a{% endif %}">
+      Confidence: {{ (thesis.confidence * 100)|round|int }}%
+    </span>
+    &nbsp; Horizon: {{ thesis.time_horizon }}
+  </p>
+  <div style="margin:12px 0;">
+    {% for step in thesis.causal_chain %}
+    <div class="chain-step">{{ step }}</div>
+    {% endfor %}
+  </div>
+  <div style="margin:8px 0;">
+    {% for t in thesis.tickers %}
+    <span class="ticker ticker-{{ t.direction|lower }}">{{ t.ticker }} {{ t.direction }} — Entry: {{ t.entry_zone }} Target: {{ t.target }}</span>
+    {% endfor %}
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{% if track_record %}
+<h2>Track Record</h2>
+<div class="card">
+  <table>
+    <tr><th>Metric</th><th>Value</th></tr>
+    <tr><td>Total Predictions</td><td>{{ track_record.total_predictions }}</td></tr>
+    <tr><td>Win Rate</td><td class="{% if track_record.win_rate >= 55 %}win{% else %}loss{% endif %}">{{ track_record.win_rate }}%</td></tr>
+    <tr><td>Avg Return</td><td class="{% if track_record.avg_return_pct >= 0 %}win{% else %}loss{% endif %}">{{ track_record.avg_return_pct }}%</td></tr>
+    <tr><td>Sharpe Estimate</td><td>{{ track_record.sharpe_estimate }}</td></tr>
+    <tr><td>Best Trade</td><td class="win">{{ track_record.best_trade }}</td></tr>
+    <tr><td>Worst Trade</td><td class="loss">{{ track_record.worst_trade }}</td></tr>
+  </table>
+</div>
+{% endif %}
+
+<p class="disclaimer">
+  This is not financial advice. Situation Room is an AI-powered research tool.
+  Always do your own due diligence before making investment decisions.
+</p>
+</body>
+</html>

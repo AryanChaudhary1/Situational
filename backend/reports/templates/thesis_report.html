@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Situation Room — Thesis Deep Dive</title>
+<style>
+  :root { --bg: #0a0a1a; --surface: #1a1a2e; --primary: #00d4ff; --accent: #7b68ee; --text: #e0e0e0; --green: #4ade80; --red: #f87171; }
+  body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); max-width: 800px; margin: 0 auto; padding: 24px; line-height: 1.6; }
+  h1 { color: var(--primary); }
+  .card { background: var(--surface); border-radius: 12px; padding: 20px; margin: 16px 0; border: 1px solid #2a2a4a; }
+  .chain-step { padding: 8px 16px; border-left: 3px solid var(--accent); margin: 8px 0; }
+  .ticker-table { width: 100%; border-collapse: collapse; }
+  .ticker-table th, .ticker-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #2a2a4a; }
+  .long { color: var(--green); } .short { color: var(--red); }
+</style>
+</head>
+<body>
+<h1>{{ thesis.title }}</h1>
+<p style="color:#888;">Generated {{ thesis.created_at }} | Confidence: {{ (thesis.confidence * 100)|round|int }}% | Horizon: {{ thesis.time_horizon }}</p>
+
+<div class="card">
+  <h2 style="color:var(--accent);">Summary</h2>
+  <p>{{ thesis.summary }}</p>
+</div>
+
+<div class="card">
+  <h2 style="color:var(--accent);">Causal Chain</h2>
+  {% for step in thesis.causal_chain %}
+  <div class="chain-step">{{ step }}</div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h2 style="color:var(--accent);">Recommendations</h2>
+  <table class="ticker-table">
+    <thead>
+      <tr><th>Ticker</th><th>Direction</th><th>Type</th><th>Entry</th><th>Target</th><th>Stop</th><th>Size</th></tr>
+    </thead>
+    <tbody>
+    {% for t in thesis.tickers %}
+      <tr>
+        <td><strong>{{ t.ticker }}</strong></td>
+        <td class="{{ t.direction|lower }}">{{ t.direction }}</td>
+        <td>{{ t.instrument_type }}</td>
+        <td>{{ t.entry_zone }}</td>
+        <td>{{ t.target }}</td>
+        <td>{{ t.stop_loss }}</td>
+        <td>{{ (t.position_size_pct * 100)|round(1) }}%</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if thesis.risks %}
+<div class="card">
+  <h2 style="color:var(--red);">Risks</h2>
+  <ul>{% for r in thesis.risks %}<li>{{ r }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if thesis.catalysts %}
+<div class="card">
+  <h2 style="color:var(--green);">Catalysts</h2>
+  <ul>{% for c in thesis.catalysts %}<li>{{ c }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+<p style="color:#555;font-size:0.75em;margin-top:40px;">Not financial advice. AI-generated research for educational purposes.</p>
+</body>
+</html>
