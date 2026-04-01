@@ -1,8 +1,11 @@
 """Alpaca paper trading client — one-click execution of thesis recommendations."""
 from __future__ import annotations
 from dataclasses import dataclass
+import logging
 
 from backend.config import Config
+
+logger = logging.getLogger(__name__)
 from backend.engine.causal_engine import InvestmentThesis
 
 
@@ -30,7 +33,7 @@ class AlpacaTrader:
                     paper=True,
                 )
             except Exception as e:
-                print(f"Alpaca init error: {e}")
+                logger.warning("Alpaca init error: %s", e)
 
     def is_configured(self) -> bool:
         return self.client is not None
@@ -65,7 +68,7 @@ class AlpacaTrader:
                 for p in positions
             ]
         except Exception as e:
-            print(f"Position fetch error: {e}")
+            logger.warning("Position fetch error: %s", e)
             return []
 
     def execute_thesis(self, thesis: InvestmentThesis, portfolio_value: float | None = None) -> list[OrderResult]:

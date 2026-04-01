@@ -16,8 +16,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 import json
+import logging
 
 import anthropic
+
+logger = logging.getLogger(__name__)
 
 from backend.config import Config
 
@@ -196,7 +199,7 @@ Respond as JSON:
             return predictions
 
         except Exception as e:
-            print(f"Predictive 13F error for {fund_key}: {e}")
+            logger.warning("Predictive 13F error for %s: %s", fund_key, e)
             return []
 
     def predict_all_tracked_funds(self, market_context: str,

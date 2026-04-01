@@ -1,9 +1,12 @@
 """Report delivery — email + file fallback."""
 from __future__ import annotations
 from datetime import datetime
+import logging
 from pathlib import Path
 
 from backend.config import Config
+
+logger = logging.getLogger(__name__)
 
 
 def deliver_report(config: Config, html: str, report_type: str = "daily") -> str:
@@ -21,7 +24,7 @@ def deliver_report(config: Config, html: str, report_type: str = "daily") -> str
             _send_sendgrid(config, html, report_type)
             return f"Delivered via SendGrid + saved to {filepath}"
         except Exception as e:
-            print(f"SendGrid delivery failed: {e}")
+            logger.warning("SendGrid delivery failed: %s", e)
 
     return f"Saved to {filepath}"
 

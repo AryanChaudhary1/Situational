@@ -3,6 +3,15 @@ from dataclasses import dataclass, asdict
 from datetime import datetime, timedelta
 
 from backend.config import Config
+from backend.constants import (
+    SIGNAL_CACHE_TTL_SECONDS,
+    SEVERITY_THRESHOLD_CRISIS,
+    SEVERITY_THRESHOLD_ALERT,
+    SEVERITY_THRESHOLD_ELEVATED,
+    SEVERITY_BONUS_VIX_FEAR,
+    SEVERITY_BONUS_VIX_ELEVATED,
+    SEVERITY_BONUS_RISK_OFF,
+)
 from backend.signals.vix import get_vix_signal, VixSignal
 from backend.signals.yield_curve import get_yield_curve_signal, YieldCurveSignal
 from backend.signals.currency import get_currency_signal, CurrencySignal
@@ -75,17 +84,17 @@ class SignalReport:
 def classify_severity(all_flags: list[str], vix: VixSignal, sectors: SectorSignal) -> str:
     score = len(all_flags)
     if vix.regime == "fear":
-        score += 3
+        score += SEVERITY_BONUS_VIX_FEAR
     elif vix.regime == "elevated":
-        score += 1
+        score += SEVERITY_BONUS_VIX_ELEVATED
     if sectors.rotation_signal == "risk_off":
-        score += 1
+        score += SEVERITY_BONUS_RISK_OFF
 
-    if score >= 6:
+    if score >= SEVERITY_THRESHOLD_CRISIS:
         return "crisis"
-    elif score >= 4:
+    elif score >= SEVERITY_THRESHOLD_ALERT:
         return "alert"
-    elif score >= 2:
+    elif score >= SEVERITY_THRESHOLD_ELEVATED:
         return "elevated"
     return "calm"
 
@@ -95,7 +104,7 @@ class SignalScanner:
         self.config = config
         self._cache: SignalReport | None = None
         self._cache_time: datetime | None = None
-        self._cache_ttl_seconds = 300  # 5-minute cache
+        self._cache_ttl_seconds = SIGNAL_CACHE_TTL_SECONDS
 
     def scan_all(self) -> SignalReport:
         # Return cached result if fresh (within TTL)

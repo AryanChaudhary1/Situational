@@ -7,7 +7,10 @@ Form 4 is the gold standard for timely insider activity. When a CEO buys $5M of
 their own stock, that Form 4 hits EDGAR within 2 days. Compare to 13F at 45 days.
 """
 from __future__ import annotations
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,7 +62,7 @@ def get_recent_insider_transactions(days_back: int = 14) -> list[InsiderTransact
         return results
 
     except Exception as e:
-        print(f"Form 3/4 fetch error: {e}")
+        logger.warning("Form 3/4 fetch error: %s", e)
         return []
 
 
@@ -107,5 +110,5 @@ def get_insider_transactions_for_ticker(ticker: str) -> list[InsiderTransaction]
         return transactions
 
     except Exception as e:
-        print(f"Insider tx fetch error for {ticker}: {e}")
+        logger.warning("Insider tx fetch error for %s: %s", ticker, e)
         return []

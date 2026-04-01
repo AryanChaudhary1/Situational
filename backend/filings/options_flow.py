@@ -12,9 +12,12 @@ Key signals:
 - Deep ITM calls = synthetic long (hidden accumulation)
 """
 from __future__ import annotations
+import logging
 from dataclasses import dataclass
 
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -126,7 +129,7 @@ def detect_unusual_options(ticker: str) -> list[OptionsFlowSignal]:
                 continue
 
     except Exception as e:
-        print(f"Options flow error for {ticker}: {e}")
+        logger.warning("Options flow error for %s: %s", ticker, e)
 
     return signals
 

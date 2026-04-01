@@ -6,8 +6,11 @@ They reveal equity holdings but with a ~45 day delay (filed 45 days after quarte
 This is the BASELINE — we use this as ground truth to train our predictive models.
 """
 from __future__ import annotations
+import logging
 from dataclasses import dataclass
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -86,7 +89,7 @@ def get_fund_holdings(cik_or_name: str) -> list[Holding]:
         return holdings
 
     except Exception as e:
-        print(f"13F parse error for {cik_or_name}: {e}")
+        logger.warning("13F parse error for %s: %s", cik_or_name, e)
         return []
 
 
@@ -170,5 +173,5 @@ def get_holding_changes(cik_or_name: str) -> list[HoldingChange]:
         return changes[:20]  # Top 20 changes
 
     except Exception as e:
-        print(f"13F change detection error for {cik_or_name}: {e}")
+        logger.warning("13F change detection error for %s: %s", cik_or_name, e)
         return []

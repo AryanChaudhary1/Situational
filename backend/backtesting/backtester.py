@@ -23,6 +23,14 @@ from backend.db.database import (
 )
 from backend.engine.ticker_validator import get_current_price
 from backend.engine.causal_engine import InvestmentThesis
+from backend.constants import (
+    DEFAULT_TARGET_MULTIPLIER,
+    DEFAULT_STOP_MULTIPLIER,
+    PRICE_RATIO_MIN,
+    PRICE_RATIO_MAX,
+    RISK_FREE_RATE_ANNUAL,
+    TRADING_DAYS_PER_YEAR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +118,8 @@ class Backtester:
                     logger.debug(f"    Fallback entry: {entry} (from current_price)")
 
                 # Apply defaults if target/stop missing
-                target_final = target or entry * 1.1
-                stop_final = stop or entry * 0.95
+                target_final = target or entry * DEFAULT_TARGET_MULTIPLIER
+                stop_final = stop or entry * DEFAULT_STOP_MULTIPLIER
 
                 if not target:
                     logger.warning(f"    [WARN] {rec.ticker} has missing target price, using default +10%: {target_final:.2f}")
@@ -124,7 +132,7 @@ class Backtester:
                     current = rec.current_price
                     if current > 0:
                         ratio = entry / current
-                        if ratio < 0.1 or ratio > 10:
+                        if ratio < PRICE_RATIO_MIN or ratio > PRICE_RATIO_MAX:
                             logger.warning(
                                 f"    [SKIP] {rec.ticker} entry ${entry:.2f} is {ratio:.1f}x current "
                                 f"${current:.2f} — likely option/stock price mismatch, skipping"
@@ -261,11 +269,15 @@ class Backtester:
         avg_return = sum(returns) / len(returns) if returns else 0
         win_rate = len(wins) / len(resolved) if resolved else 0
 
-        # Rough Sharpe estimate (annualized)
+        # Sharpe ratio (annualized, excess returns over risk-free rate)
         if len(returns) >= 2:
             import numpy as np
             returns_arr = np.array(returns)
-            sharpe = (returns_arr.mean() / returns_arr.std()) * (252 ** 0.5) if returns_arr.std() > 0 else 0
+            # Convert annual risk-free rate to per-trade rate
+            # (rough: assume each prediction spans ~DEFAULT_TIME_HORIZON_DAYS)
+            rf_per_trade = RISK_FREE_RATE_ANNUAL * (30 / TRADING_DAYS_PER_YEAR)
+            excess_returns = returns_arr - rf_per_trade
+            sharpe = (excess_returns.mean() / excess_returns.std()) * (TRADING_DAYS_PER_YEAR ** 0.5) if excess_returns.std() > 0 else 0
         else:
             sharpe = 0.0
 

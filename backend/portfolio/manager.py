@@ -1,8 +1,11 @@
 """Portfolio manager — tracks user portfolio and notable investor portfolios."""
 from __future__ import annotations
 from dataclasses import dataclass
+import logging
 
 from backend.config import Config
+
+logger = logging.getLogger(__name__)
 from backend.db.database import save_tracked_portfolio, save_portfolio_holding
 from backend.filings.edgar_13f import get_holding_changes, NOTABLE_FUNDS, HoldingChange
 
@@ -44,7 +47,7 @@ class PortfolioManager:
                         total_changes=len(changes),
                     ))
             except Exception as e:
-                print(f"Error tracking {fund_info['name']}: {e}")
+                logger.warning("Error tracking %s: %s", fund_info['name'], e)
                 continue
 
         return updates

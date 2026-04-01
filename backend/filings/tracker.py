@@ -8,10 +8,19 @@ Each layer has different timeliness and confidence profiles.
 The tracker aggregates them into a unified view, ranked by actionability.
 """
 from __future__ import annotations
+
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 
 from backend.config import Config
+from backend.constants import (
+    CONFIDENCE_INSIDER_BUY,
+    CONFIDENCE_INSIDER_SELL,
+    CONFIDENCE_13D_ACTIVIST,
+    CONFIDENCE_13G_PASSIVE,
+    CONVERGENCE_THRESHOLD,
+)
 from backend.filings.edgar_13f import get_holding_changes, NOTABLE_FUNDS
 from backend.filings.edgar_13dg import get_recent_13dg_filings
 from backend.filings.form34 import get_recent_insider_transactions
@@ -91,6 +100,9 @@ class FilingIntelReport:
         return "\n".join(lines)
 
 
+logger = logging.getLogger(__name__)
+
+
 class FilingTracker:
     def __init__(self, config: Config):
         self.config = config
@@ -131,13 +143,13 @@ class FilingTracker:
                         investor_name=tx.insider_name,
                         ticker=tx.ticker or tx.company,
                         signal_type=tx.transaction_type,
-                        confidence=0.7 if tx.transaction_type == "BUY" else 0.5,
+                        confidence=CONFIDENCE_INSIDER_BUY if tx.transaction_type == "BUY" else CONFIDENCE_INSIDER_SELL,
                         timeliness="days",
                         details=f"{tx.insider_name} ({tx.insider_title}) {tx.transaction_type} "
                                 f"{tx.shares:.0f} shares of {tx.company}",
                     ))
         except Exception as e:
-            print(f"Layer 1 Form 4 error: {e}")
+            logger.warning("Layer 1 Form 4 scan failed: %s", e)
 
         # 13D/13G filings
         try:
@@ -149,13 +161,13 @@ class FilingTracker:
                     investor_name=f.investor_name,
                     ticker=f.target_ticker or f.target_company,
                     signal_type="ACTIVIST" if f.filing_type == "13D" else "PASSIVE_5PCT",
-                    confidence=0.75 if f.filing_type == "13D" else 0.6,
+                    confidence=CONFIDENCE_13D_ACTIVIST if f.filing_type == "13D" else CONFIDENCE_13G_PASSIVE,
                     timeliness="days",
                     details=f"{f.investor_name} filed {f.filing_type} for {f.target_company} "
                             f"({f.ownership_pct:.1f}% ownership)",
                 ))
         except Exception as e:
-            print(f"Layer 1 13D/G error: {e}")
+            logger.warning("Layer 1 13D/G scan failed: %s", e)
 
         return signals
 
@@ -178,7 +190,7 @@ class FilingTracker:
                     details=o.details,
                 ))
         except Exception as e:
-            print(f"Layer 2 options error: {e}")
+            logger.warning("Layer 2 options flow scan failed: %s", e)
 
         # ETF flows
         try:
@@ -195,7 +207,7 @@ class FilingTracker:
                     details=ef.details,
                 ))
         except Exception as e:
-            print(f"Layer 2 ETF flows error: {e}")
+            logger.warning("Layer 2 ETF flows scan failed: %s", e)
 
         # Earnings inference
         try:
@@ -212,7 +224,7 @@ class FilingTracker:
                     details=ei.details,
                 ))
         except Exception as e:
-            print(f"Layer 2 earnings error: {e}")
+            logger.warning("Layer 2 earnings scan failed: %s", e)
 
         return signals
 
@@ -243,7 +255,7 @@ class FilingTracker:
                         editable=True,
                     ))
         except Exception as e:
-            print(f"Layer 3 predictive error: {e}")
+            logger.warning("Layer 3 predictive scan failed: %s", e)
 
         return signals
 
@@ -262,9 +274,9 @@ class FilingTracker:
                 ticker_signals[s.ticker]["bearish"] += 1
 
         for ticker, counts in ticker_signals.items():
-            if counts["bullish"] >= 3:
+            if counts["bullish"] >= CONVERGENCE_THRESHOLD:
                 flags.append(f"CONVERGENT BULLISH: {ticker} has {counts['bullish']} bullish signals across layers")
-            if counts["bearish"] >= 3:
+            if counts["bearish"] >= CONVERGENCE_THRESHOLD:
                 flags.append(f"CONVERGENT BEARISH: {ticker} has {counts['bearish']} bearish signals across layers")
 
         return flags

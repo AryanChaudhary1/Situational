@@ -2,6 +2,9 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,5 +47,5 @@ def get_congressional_trades(finnhub_api_key: str, days_back: int = 30) -> list[
         return results
 
     except Exception as e:
-        print(f"Congressional trades error: {e}")
+        logger.warning("Congressional trades error: %s", e)
         return []

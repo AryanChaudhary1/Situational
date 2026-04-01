@@ -8,7 +8,10 @@ Schedule 13G: Filed by passive investors crossing 5% threshold.
 These filings are 4-6 WEEKS faster than 13F disclosures.
 """
 from __future__ import annotations
+import logging
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -56,7 +59,7 @@ def get_recent_13dg_filings(days_back: int = 30) -> list[Schedule13Filing]:
         return results
 
     except Exception as e:
-        print(f"13D/G fetch error: {e}")
+        logger.warning("13D/G fetch error: %s", e)
         return []
 
 
@@ -88,5 +91,5 @@ def get_13dg_for_ticker(ticker: str) -> list[Schedule13Filing]:
 
         return filings
     except Exception as e:
-        print(f"13D/G ticker lookup error for {ticker}: {e}")
+        logger.warning("13D/G ticker lookup error for %s: %s", ticker, e)
         return []

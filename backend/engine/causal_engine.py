@@ -22,11 +22,21 @@ import anthropic
 logger = logging.getLogger(__name__)
 
 from backend.config import Config
+from backend.constants import (
+    LLM_MODEL,
+    LLM_PASS1_MAX_TOKENS,
+    LLM_PASS2_MAX_TOKENS,
+    DEFAULT_CONFIDENCE,
+    DEFAULT_TIME_HORIZON,
+    DEFAULT_TIME_HORIZON_DAYS,
+    DEFAULT_POSITION_SIZE_PCT,
+    DEFAULT_DIRECTION,
+    DEFAULT_INSTRUMENT_TYPE,
+)
 from backend.engine.prompts import (
     SYSTEM_PROMPT,
     SIGNAL_ANALYSIS_PROMPT,
     MANUAL_THESIS_PROMPT,
-    HOLDING_ANALYSIS_PROMPT,
     THESIS_JSON_FORMAT,
 )
 from backend.engine.ticker_validator import validate_ticker, TickerInfo
@@ -90,17 +100,6 @@ class InvestmentThesis:
         }
 
 
-@dataclass
-class HoldingAnalysis:
-    investor_name: str
-    ticker: str
-    likely_thesis: str
-    macro_connection: str
-    agree_disagree: str
-    exit_signals: list[str]
-    retail_recommendation: str
-
-
 class CausalEngine:
     def __init__(self, config: Config):
         self.config = config
@@ -127,7 +126,7 @@ class CausalEngine:
         reasoning = await self._call_claude(
             system=SYSTEM_PROMPT,
             user=user_prompt,
-            max_tokens=2048,  # Reduced from 4096
+            max_tokens=LLM_PASS1_MAX_TOKENS,
         )
         logger.debug(f"[PASS1] Reasoning generated ({len(reasoning)} chars)")
 
@@ -142,7 +141,7 @@ class CausalEngine:
         json_response = await self._call_claude(
             system="You are a JSON formatting assistant. Output ONLY valid JSON, nothing else.",
             user=structured_prompt,
-            max_tokens=4096,  # Needs full budget for 4 theses in JSON
+            max_tokens=LLM_PASS2_MAX_TOKENS,
         )
         logger.debug(f"[PASS2] JSON generated ({len(json_response)} chars)")
 
@@ -179,37 +178,6 @@ class CausalEngine:
         logger.info(f"[BUILD_THESES] Complete: {len(theses)} theses with {sum(len(t.tickers) for t in theses)} total predictions")
         return theses
 
-    async def analyze_holding(self, investor_name: str, ticker: str, shares: float,
-                              value: float, change_type: str, filing_date: str,
-                              signal_summary: str) -> HoldingAnalysis:
-        """Explain WHY a notable investor holds a position."""
-        prompt = HOLDING_ANALYSIS_PROMPT.format(
-            investor_name=investor_name,
-            ticker=ticker,
-            shares=shares,
-            value=value,
-            change_type=change_type,
-            filing_date=filing_date,
-            signal_report=signal_summary,
-        )
-
-        response = await self._call_claude(
-            system=SYSTEM_PROMPT,
-            user=prompt,
-            max_tokens=2048,
-        )
-
-        # Parse free-form response into structured analysis
-        return HoldingAnalysis(
-            investor_name=investor_name,
-            ticker=ticker,
-            likely_thesis=response,
-            macro_connection="",
-            agree_disagree="",
-            exit_signals=[],
-            retail_recommendation="",
-        )
-
     async def _call_claude(self, system: str, user: str, max_tokens: int = 4096) -> str:
         """Call Claude API asynchronously."""
         # Run in thread pool to avoid blocking event loop
@@ -217,7 +185,7 @@ class CausalEngine:
         response = await loop.run_in_executor(
             None,
             lambda: self.client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=LLM_MODEL,
                 max_tokens=max_tokens,
                 system=system,
                 messages=[{"role": "user", "content": user}],
@@ -270,13 +238,13 @@ class CausalEngine:
             for tr in td.get("tickers", []):
                 tickers.append(TickerRecommendation(
                     ticker=tr.get("ticker", ""),
-                    instrument_type=tr.get("instrument_type", "stock"),
-                    direction=tr.get("direction", "LONG"),
+                    instrument_type=tr.get("instrument_type", DEFAULT_INSTRUMENT_TYPE),
+                    direction=tr.get("direction", DEFAULT_DIRECTION),
                     rationale=tr.get("rationale", ""),
                     entry_zone=tr.get("entry_zone", ""),
                     target=tr.get("target", ""),
                     stop_loss=tr.get("stop_loss", ""),
-                    position_size_pct=float(tr.get("position_size_pct", 0.02)),
+                    position_size_pct=float(tr.get("position_size_pct", DEFAULT_POSITION_SIZE_PCT)),
                 ))
 
             theses.append(InvestmentThesis(
@@ -285,9 +253,9 @@ class CausalEngine:
                 summary=td.get("summary", ""),
                 causal_chain=td.get("causal_chain", []),
                 tickers=tickers,
-                confidence=float(td.get("confidence", 0.5)),
-                time_horizon=td.get("time_horizon", "unknown"),
-                time_horizon_days=int(td.get("time_horizon_days", 30)),
+                confidence=float(td.get("confidence", DEFAULT_CONFIDENCE)),
+                time_horizon=td.get("time_horizon", DEFAULT_TIME_HORIZON),
+                time_horizon_days=int(td.get("time_horizon_days", DEFAULT_TIME_HORIZON_DAYS)),
                 risks=td.get("risks", []),
                 catalysts=td.get("catalysts", []),
                 tags=td.get("tags", []),

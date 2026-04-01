@@ -10,9 +10,13 @@ This module uses Perplexity to analyze recent earnings calls and extract signals
 """
 from __future__ import annotations
 from dataclasses import dataclass
-import requests
 import json
+import logging
 import re
+
+import requests
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -90,5 +94,5 @@ def analyze_recent_earnings(perplexity_api_key: str, tickers: list[str] | None =
         return results
 
     except Exception as e:
-        print(f"Earnings inference error: {e}")
+        logger.warning("Earnings inference error: %s", e)
         return []

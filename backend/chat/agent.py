@@ -11,6 +11,7 @@ from __future__ import annotations
 import anthropic
 
 from backend.config import Config
+from backend.constants import LLM_MODEL
 from backend.db.database import save_chat_message, get_chat_history
 from backend.chat.prompts import CHAT_SYSTEM_PROMPT, CHAT_WITH_CONTEXT_PROMPT
 from backend.chat.user_profile import UserProfileManager
@@ -59,7 +60,7 @@ class ChatAgent:
 
         # Call Claude
         response = self.client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=LLM_MODEL,
             max_tokens=2048,
             system=system,
             messages=messages,

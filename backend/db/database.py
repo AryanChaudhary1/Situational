@@ -6,6 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from backend.constants import DEFAULT_THESIS_CONFIDENCE, DEFAULT_EDGE_STRENGTH
+
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 
@@ -90,14 +92,14 @@ def save_thesis(db_path: str, thesis: dict) -> int:
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (thesis["thesis_id"], thesis.get("source", "agent"), thesis["title"],
              thesis.get("summary", ""), json.dumps(thesis.get("causal_chain", [])),
-             json.dumps(thesis.get("tickers", [])), thesis.get("confidence", 0.5),
+             json.dumps(thesis.get("tickers", [])), thesis.get("confidence", DEFAULT_THESIS_CONFIDENCE),
              thesis.get("time_horizon", ""), json.dumps(thesis.get("risks", [])),
              json.dumps(thesis.get("catalysts", [])), json.dumps(thesis.get("tags", []))),
         )
         return cur.lastrowid
 
 
-def save_thesis_edge(db_path: str, from_id: str, to_id: str, relationship: str, strength: float = 0.5):
+def save_thesis_edge(db_path: str, from_id: str, to_id: str, relationship: str, strength: float = DEFAULT_EDGE_STRENGTH):
     with _connect(db_path) as conn:
         conn.execute(
             "INSERT INTO thesis_edges (from_thesis_id, to_thesis_id, relationship, strength) VALUES (?, ?, ?, ?)",
